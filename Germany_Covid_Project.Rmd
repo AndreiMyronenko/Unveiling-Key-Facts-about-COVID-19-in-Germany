@@ -1,0 +1,849 @@
+---
+title: "Unveiling Key Facts about COVID-19 in Germany"
+subtitle: "Introduction to R for Social Scientists"
+author: "Holionko Kateryna & Myronenko Andrii"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: 
+  rmdformats::downcute
+runtime: shiny_prerendered
+---
+
+\pagenumbering{arabic}
+
+# Introduction & Research Questions
+
+The 2019 Novel Coronavirus (COVID-19) continues to spread in countries around 
+the world and we cannot see the end of this pandemic. While some countries 
+remove all the restrictions such as wearing masks in public places, prohibition 
+on public gatherings etc., Germany has arguably remained the only European country
+where people must wear a FFP2 mask in public transport. The recent news on 
+COVID-19 spread in Germany has been quite concerning, as the number of cases 
+started to rise again. 
+So, we decided to dive deep in the coronavirus outbreak in Germany and analyse the
+dynamics of cases and deaths in the country, find out the most affected German 
+States as well as the most affected age groups among Germany’s population, compare
+the infection rate between males and females, determine the most popular vaccine
+for German citizens and understand whether the targeted vaccination rate stated 
+by the German government was achieved. 
+For all these research questions to be answered we used R programming language 
+and its versatile powerful packages. 
+
+# Content
+
+The dataset we have used was obtained from [Kaggle](https://www.kaggle.com/datasets/headsortails/covid19-tracking-germany?select=covid_de.csv). It consists of three main csv files: 
+
+1. `covid_de.csv`: COVID-19 cases and deaths which are updated daily. The original
+data are being collected by Germany's [Robert Koch Institute](https://www.rki.de/EN/Home/homepage_node.html)
+and can be download through the [National Platform for Geographic Data](https://npgeo-corona-npgeo-de.hub.arcgis.com)
+2. `demographics_de.csv`: General Demographic Data about Germany on the federal 
+state level. This data has been downloaded from Germany's Federal Office for 
+Statistics (Statistisches Bundesamt) through their Open Data platform [GENESIS](https://www-genesis.destatis.de/genesis/online/data?operation=sprachwechsel&language=en).
+3. `covid_de_vaccines.csv`: COVID-19 vaccination progress for Germany as a whole. 
+This dataset details daily doses, broken down cumulatively by manufacturer, 
+as well as the cumulative number of people having received their first and 
+full vaccination.
+
+Let us start with the setup of the working space in R.
+
+# Setup
+
+```{r include=FALSE, message = FALSE, warnings = FALSE}
+styler::tidyverse_style()
+
+rm(list=ls())
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+We need to get rid of any possible data in our cache and load all the libraries 
+which are useful for our data analysis.
+We will use the `tidyverse` package to get access to a great variety of packages
+such as `dplyr` and `ggplot2` which helps us to clean and visualize the data. 
+The package `leaflet` helps us create an interactive clustered map for a better 
+coronavirus cases representation. `RColorBrewer` allows us to pick certain color
+gradients and is an extremely helpful and underrated tool for EDA. Package `shiny`
+is used to create a shiny markdown in order to have a better visualization of our
+final report. Finally, `plotly` helps us create interactive web-based graphs.
+
+```{r, message = FALSE, warnings = FALSE, echo=FALSE}
+library(tidyverse)
+library(RColorBrewer)
+library(plotly)
+library(shiny)
+library(ggplot2)
+library(leaflet, quietly = T, warn.conflicts = F)
+library(scales)
+```
+
+# Import Data
+
+Let's import 3 csv.files: `covid_de` with all the data regarding covid-19 cases,
+deaths and recoveries in Germany, `demographics_de` with the information about 
+Germany's population and `covid_de_vaccines` with all the vaccination data.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+#setwd(dir = "~/Desktop/Uni/R for Social Scientists")
+covid_de_data <- read.csv("covid_de.csv") %>% as_tibble()
+covid_de_vaccines <- read_csv("covid_de_vaccines.csv") %>% as_tibble()
+demographics_de <- read_csv("demographics_de.csv") %>% as_tibble()
+```
+
+# Data Observation & Descriptive Statistics
+
+## Structure of data{.tabset .tabset-pills}
+
+Let's analyse the structure of the 3 datasets.
+First and foremost, we need to check the structure and extent of data by using
+the following commands: `dim` and `str`
+
+### covid_de_data
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+dim(covid_de_data)
+str(covid_de_data)
+```
+
+`covid_de_data` dataset contains more then 2 million observation with specified 
+state, country, age, gender, date, cases, death and recovered numbers. Last three
+columns are in numeric format, the rest is character.
+
+### covid_de_vaccines
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+dim(covid_de_vaccines)
+str(covid_de_vaccines)
+```
+
+`covid_de_vaccines` dataset provides some information about date of the vaccination,
+amount of first and second doses, and the amount of people being vaccinated with
+Moderna/Astra Zeneca/Pfizer. All but one columns are numeric, date column is in
+the Date format.
+
+### demographics_de
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+dim(demographics_de)
+str(demographics_de)
+```
+
+`demographics_de` shows state, gender and age grop of the person as well as the 
+population. First three columns are character, whereas the last is numeric.
+
+## {-}
+
+We can now see, whether the number of columns and rows is what we have expected
+from the original document. Further, we can already see that most of our columns
+are of type numeric and character.
+
+
+## Row checking{.tabset .tabset-pills}
+
+More importantly, we need to make sure the data is indeed imported in the correct
+manner, by checking some of the rows. It is known that it is usually enough to
+check the first, last and some arbirtrary entries of the data:
+
+### covid_de_data
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+head(covid_de_data)
+tail(covid_de_data)
+covid_de_data[500000:500005,]
+```
+
+### covid_de_vaccines
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+head(covid_de_vaccines)
+tail(covid_de_vaccines)
+covid_de_vaccines[200:205,]
+```
+
+### demographics_de
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+head(demographics_de)
+tail(demographics_de)
+demographics_de[100:105,]
+```
+
+## {-}
+
+Now we can see that the data is imported in a way we expected it to be
+
+## NA Values{.tabset .tabset-pills}
+
+Let's now check our datasets for na values
+
+### covid_de_data
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+na_rows_covid_de <- apply(is.na(covid_de_data),1,sum)/ncol(covid_de_data)
+plot(na_rows_covid_de,type="h")
+```
+
+There are some missing values, but overall the data set looks very clean.
+
+Let's now create a nice little table which helps us with an overview of the 
+missingness and uniqueness of values in our columns. First, we start with calculating
+the  percentage of missing values per column
+
+```{r, warning=FALSE, message=FALSE, echo=TRUE}
+missing_vals <- as.matrix(covid_de_data %>% is.na %>% colSums)
+missing_vals_rel <- round(100*missing_vals/nrow(covid_de_data),2)
+```
+
+Now, we can summarise our findings in a small data summary table:
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+data_summary <- data.frame(missing_vals, missing_vals_rel)
+colnames(data_summary) <- c("NAs", "NAs_rel")
+data_summary
+```
+
+<p class="comment">
+**Result**: There are a tiny 0.59% of missing data in the column "age_group" and
+an insignificantnumber of missing values in the column "gender". So, our `covid_de_data`
+dataset looks clean enough to explore it.
+</p>
+
+### covid_de_vaccines
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+na_rows_covid_de_vaccines <- apply(is.na(covid_de_vaccines),1,sum)/ncol(covid_de_vaccines)
+plot(na_rows_covid_de_vaccines, type="h")
+```
+
+There are no missing values in `covid_de_vaccines` dataset so we won't explore
+data in every column.
+
+### demographics_de
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+na_rows_demographics <- apply(is.na(demographics_de),1,sum)/ncol(demographics_de)
+plot(na_rows_demographics,type="h")
+```
+
+There are no missing values in `demographics_de` dataset so we won't explore
+data in every column.
+
+## {-}
+
+## Summary
+
+As a first insight it is recommended to take a look at the standard statistics of
+localization and dispersion such as the mean and standard deviation.
+
+```{r, warning=FALSE, echo=FALSE, echo=FALSE}
+fluidPage(
+
+  # Sidebar layout with a input and output definitions ----
+  sidebarLayout(
+
+    # Sidebar panel for inputs ----
+    sidebarPanel(
+
+      # Input: Selector for choosing dataset ----
+      selectInput(inputId = "dataset",
+                  label = "Choose a dataset:",
+                  choices = c("covid_de_data", "covid_de_vaccines", "demographics_de")),
+    ),
+
+    # Main panel for displaying outputs ----
+    mainPanel(
+
+      # Output: Verbatim text for data summary ----
+      verbatimTextOutput("text"),
+
+    )
+  )
+)
+
+```
+
+```{r, context = "server", echo=FALSE}
+# Return the requested dataset ----
+ datasetInput <- reactive({
+    switch(input$dataset,
+           covid_de_data = read.csv("covid_de.csv"),
+           covid_de_vaccines = read.csv("covid_de_vaccines.csv"),
+           demographics_de = read.csv("demographics_de.csv"))
+ #          "covid_de_data" = read.csv("~/Desktop/Uni/R for Social Scientists/covid_de.csv"), #write your working directory here
+#           "covid_de_vaccines" = read.csv("~/Desktop/Uni/R for Social Scientists/covid_de_vaccines.csv"),
+#           "demographics_de" = read.csv("~/Desktop/Uni/R for Social Scientists/demographics_de.csv"))
+  })
+
+  # Generate a summary of the dataset ----
+  output$text <- renderPrint({
+    dataset <- datasetInput()
+    summary(dataset)
+  })
+
+```
+
+This brief summary of course is nothing more than a quick peek at the data. So, 
+finally we are ready to do exploratory data analysis in relation to our research
+questions.
+
+# Exploratory Data Analysis (EDA) 
+
+## COVID-19 case and death progression by German State{.tabset .tabset-pills}
+
+To begin with, we would like to see the dynamics of coronavirus cases and
+deaths in each German State over time. So let's create a line graphs with COVID-19
+cases (we will draw this graph from November 2020, not the date of the very first
+recorded COVID-19 case, since the dynamics of case progression is better
+seen this way) and deaths over time.
+
+### Case progression
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_de_data %>%
+  arrange(date) %>%
+  group_by(date, state) %>%
+  summarise(cases = sum(cases),
+            deaths = sum(deaths),
+            recovered = sum(recovered)) %>%
+  ungroup() %>%
+  group_by(state) %>%
+  summarise(date = date,
+            cases = cases,
+            cumulative_cases = cumsum(cases),
+            deaths = deaths,
+            cumulative_deaths = cumsum(deaths),
+            recovered = recovered,
+            cumulative_recoveries = cumsum(recovered)) %>%
+  ungroup() %>%
+  filter(date > "2020-11-01") %>%
+  plot_ly(x = ~date,
+          y = ~cumulative_cases,
+          type = "scatter",
+          mode = "lines",
+          color = ~state) %>%
+  layout(yaxis = list(title = "Cases"),
+         xaxis = list(title = "Date"))
+```
+
+### Death progression
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_de_data %>%
+  arrange(date) %>%
+  group_by(date, state) %>%
+  summarise(cases = sum(cases),
+            deaths = sum(deaths),
+            recovered = sum(recovered)) %>%
+  ungroup() %>%
+  group_by(state) %>%
+  summarise(date = date,
+            cases = cases,
+            cumulative_cases = cumsum(cases),
+            deaths = deaths,
+            cumulative_deaths = cumsum(deaths),
+            recovered = recovered,
+            cumulative_recoveries = cumsum(recovered)) %>%
+  ungroup() %>%
+  plot_ly(x = ~date,
+          y = ~cumulative_deaths,
+          type = "scatter",
+          mode = "lines",
+          color = ~state) %>%
+  layout(yaxis = list(title = "Deaths"),
+         xaxis = list(title = "Date"))
+```
+
+## {-}
+
+From the "Cases progression by German State" chart we can conclude that three 
+German States, namely Nordrhein-Westfallen, Bayern and Baden-Wuerttemberg have far
+higher coronavirus cases than the rest of Germany. Regarding deaths progression 
+Bayern and Nordrhein-Westfallen have the worst situation, however, the number 
+of deaths in Sachsen, which does not have as many infections as Bayern, 
+Nordrhein-Westfallen and Baden-Wuerttemberg, is almost the same as in Baden-Wuerttemberg.
+
+## German States with the most coronavirus cases and deaths{.tabset .tabset-pills}
+
+Let's breakdown German States by the largest total number of coronavirus cases 
+and deaths. 
+
+### States with the greatest number of cases
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_de_data %>%
+  arrange(date) %>%
+  group_by(date, state) %>%
+  summarise(cases = sum(cases),
+            deaths = sum(deaths),
+            recovered = sum(recovered)) %>%
+  ungroup() %>%
+  group_by(state) %>%
+  summarise(date = date,
+            cases = cases,
+            cumulative_cases = cumsum(cases),
+            deaths = deaths,
+            cumulative_deaths = cumsum(deaths),
+            recovered = recovered,
+            cumulative_recoveries = cumsum(recovered)) %>%
+  ungroup() %>%
+  filter(date == date[length(date)]) %>%
+  arrange(desc(cumulative_cases)) %>%
+  top_n(7) %>%
+  plot_ly(x = ~cumulative_cases,
+          y = ~reorder(state, cumulative_cases),
+          type = 'bar',
+          orientation = 'h',
+          marker = list(color = c("orangered", "orangered", "orangered", 
+                                  "lightskyblue", "lightskyblue", "lightskyblue", 
+                                  "lightskyblue"))) %>%
+  layout(yaxis = list(title = ""),
+         xaxis = list(title = "Cases"))
+```
+
+### States with the greatest number of deaths
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_de_data %>%
+  arrange(date) %>%
+  group_by(date, state) %>%
+  summarise(cases = sum(cases),
+            deaths = sum(deaths),
+            recovered = sum(recovered)) %>%
+  ungroup() %>%
+  group_by(state) %>%
+  summarise(date = date,
+            cases = cases,
+            cumulative_cases = cumsum(cases),
+            deaths = deaths,
+            cumulative_deaths = cumsum(deaths),
+            recovered = recovered,
+            cumulative_recoveries = cumsum(recovered)) %>%
+  ungroup() %>%
+  filter(date == date[length(date)]) %>%
+  arrange(desc(cumulative_deaths)) %>%
+  top_n(7) %>%
+  plot_ly(x = ~cumulative_deaths,
+          y = ~reorder(state, cumulative_deaths),
+          type = 'bar',
+          orientation = 'h',
+          marker = list(color = c("orangered", "orangered", "orangered", 
+                                  "orangered", "lightskyblue", "lightskyblue", 
+                                  "lightskyblue"))) %>%
+  layout(yaxis = list(title = ""),
+         xaxis = list(title = "Deaths"))
+```
+
+## {-}
+
+Now we can clearly see that Nordrhein-Westfallen, Bayern and Baden-Wuerttemberg
+have the most number of infections and consequently the largest number of covid-
+related deaths. Although Sachsen registered more than 2 times less coronavirus cases
+than Baden-Wuerttemberg, its death toll turned out to be almost the same.
+
+Let's now create a table with the total number of cases and deaths by age groups.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_by_age <- covid_de_data %>%
+  na.omit() %>%
+  arrange(date) %>%
+  group_by(date, state, age_group) %>%
+  summarise(cases = sum(cases),
+            deaths = sum(deaths),
+            recovered = sum(recovered)) %>%
+  ungroup() %>%
+  group_by(age_group) %>%
+  summarise(Cases = sum(cases),
+            Deaths = sum(deaths)) %>%
+  ungroup()
+
+covid_data_by_age
+```
+
+Now our data is suitable for doing meaningful charts to analyse cases and deaths
+in different age groups.
+
+## Breakdown of coronavirus cases and deaths by age group{.tabset .tabset-pills}
+
+### Total coronavirus cases by age group
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_by_age %>%
+  plot_ly(x = ~age_group,
+          y = ~Cases,
+          type = "bar") %>%
+  layout(yaxis = list(title = "Cases"),
+         xaxis = list(title = "Age Group"))
+```
+
+### Total coronavirus deaths by age group
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_by_age %>%
+  plot_ly(x = ~age_group,
+          y = ~Deaths,
+          type = "bar",
+          marker = list(color = c("lightskyblue", "lightskyblue", "lightskyblue",
+                                  "lightskyblue", "darkorange", "orangered"))) %>%
+  layout(yaxis = list(title = "Deaths"),
+         xaxis = list(title = "Age Group"))
+```
+
+## {-}
+
+It is evident from the charts that the most number of coronavirus cases is recorded
+in the age group from 35 to 59, while the greatest number of deaths occur in 
+80-99 age group, despite this group has the second lowest number of cases.
+
+## Death Rate by age group
+
+Let's calculate the death rate for each age group and depict it.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_by_age %>%
+  mutate(Death_Rate = round(Deaths/Cases * 100, 2)) %>%
+  plot_ly(x = ~age_group,
+          y = ~Death_Rate,
+          type = "scatter",
+          mode = "lines+markers") %>%
+  layout(xaxis = list(title = "Age Group"),
+         yaxis = list(title = "Death Rate",
+                      ticksuffix = "%"))
+```
+
+From this graph we may make a conclusion that the older a person is, the more
+likelihood there is that the person dies from coronavirus. Almost every tenth person
+aged 80-99 dies from COVID-19 as the diagram suggests.
+
+For further analysis we would like to create a table with the total number of 
+cases and deaths among males and females by different age groups and German States.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_by_age_state <- covid_de_data %>%
+  na.omit() %>%
+  arrange(date) %>%
+  group_by(date, state, age_group, gender) %>%
+  summarise(cases = sum(cases),
+            deaths = sum(deaths),
+            recovered = sum(recovered)) %>%
+  ungroup() %>%
+  group_by(age_group, state, gender) %>%
+  summarise(Cases = sum(cases),
+            Deaths = sum(deaths)) %>%
+  ungroup()
+
+covid_data_by_age_state
+```
+
+For a better visuals let's change the data in the column "gender" - specify that
+"F" is "female" and "M" is "male".
+
+```{r, warning=FALSE, message=FALSE, echo=TRUE}
+covid_data_by_age_state <- covid_data_by_age_state %>%
+  mutate(gender = recode(gender, "F" = "female", "M" = "male"))
+
+covid_de_data <- covid_de_data %>%
+  mutate(gender = recode(gender, "F" = "female", "M" = "male"))
+```
+
+The data in our tables now looks consistent and analyzable. Let's now look at the
+relative number of infected people. For this purpose let's join the column "population"
+from `demographics_de` datasetand calculate the percent of infected people by 
+each age_group.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_by_age_state <- left_join(covid_data_by_age_state,
+                                     demographics_de,
+                                     by = c("state", "age_group", "gender"))
+covid_data_by_age_state
+```
+
+Finally, we can create a vertical bar chart for the proportion of infections
+in different age group to a total population of this age group.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_by_age_state %>% 
+  group_by(age_group) %>%
+  summarise(Cases = sum(Cases),
+            Deaths = sum(Deaths),
+            Population = sum(population)) %>%
+  ungroup() %>%
+  mutate(infection_rate = round(Cases/Population * 100 , 2)) %>%
+  plot_ly(x = ~age_group,
+          y = ~infection_rate,
+          type = "bar") %>%
+  layout(yaxis = list(title = "Infection Rate",
+                      dtick = 10, 
+                      tick0 = 0, 
+                      ticksuffix = "%",
+                      range = c(0, 55)),
+         xaxis = list(title = "Age Group"))
+```
+
+From the bar chart it is evident that more than half of children aged 5-14 got 
+infected with COVID-19. This is followed by people aged 15-34 and 35-59 
+respectively. So, a lot of children and young adults caught COVID-19, although
+the death rate in these age groups is substantially low.
+
+## Coronavirus cases and deaths distribution by gender{.tabset .tabset-pills}
+
+Now we would like to compare number of infections and deaths among males and 
+females. For this purpose we will create pie charts.
+
+### Covid-19 cases distribution by gender
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_de_data %>%
+  na.omit() %>%
+  arrange(date) %>%
+  group_by(date, state, age_group, gender) %>%
+  summarise(cases = sum(cases),
+            deaths = sum(deaths),
+            recovered = sum(recovered)) %>%
+  ungroup() %>% 
+  group_by(gender) %>%
+  summarise(Cases = sum(cases),
+            Deaths = sum(deaths)) %>%
+  ungroup() %>%
+  plot_ly(labels = ~gender,
+          values = ~Cases,
+          type = "pie",
+          textposition = "inside",
+          textinfo = "label+percent",
+          showlegend = FALSE,
+          marker = list(colors = c("#FF9933",
+                                   "#009900"))) %>%
+  layout(title = 'Cases Distribution by gender',
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+```
+
+### Covid-19 deaths distribution by gender
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_de_data %>%
+  na.omit() %>%
+  arrange(date) %>%
+  group_by(date, state, age_group, gender) %>%
+  summarise(cases = sum(cases),
+            deaths = sum(deaths),
+            recovered = sum(recovered)) %>%
+  ungroup() %>% 
+  group_by(gender) %>%
+  summarise(Cases = sum(cases),
+            Deaths = sum(deaths)) %>%
+  ungroup() %>%
+  plot_ly(labels = ~gender,
+          values = ~Deaths,
+          type = "pie",
+          textposition = "inside",
+          textinfo = "label+percent",
+          showlegend = FALSE,
+          marker = list(colors = c("#FF9933",
+                                   "#009900"))) %>%
+  layout(title = 'Deaths Distribution by gender',
+         xaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE),
+         yaxis = list(showgrid = FALSE, zeroline = FALSE, showticklabels = FALSE))
+```
+
+## {-}
+
+From these pie charts we can clearly see that although the number of women, 
+who caught coronavirus, is a few percents larger, the proportion of deaths 
+turned out to be 6.6% higher for males
+
+## Comparison of infection rates among male and female of different age groups
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_by_age_state %>% 
+  group_by(age_group, gender) %>%
+  summarise(Cases = sum(Cases),
+            Deaths = sum(Deaths),
+            Population = sum(population)) %>%
+  ungroup() %>%
+  mutate(infection_rate = Cases/Population) %>%
+  ggplot(aes(fill=gender, y=infection_rate, x=age_group)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  scale_y_continuous(breaks = seq(0, 0.6, by = 0.1), labels = scales::percent) +
+  scale_fill_brewer(palette = "Accent") +
+  labs(title = "Infection Rate Dynamics of men and women by age groups",
+       x = "Age Group",
+       y = "Infection Rate") +
+  theme_light() +
+  geom_text(aes(label = percent(infection_rate)), vjust = 2.5, 
+            position = position_dodge(.9), colour = "black", size = 2.5)
+```
+
+It is evident from this grouped bar chart that in the age group younger than 15 years old
+there are more males infected. From 15 to 59 years old the proportion of females 
+who caught COVID-19 is few percents higher than that of men. In the most vulnerable
+age group 80-99 the proportions are distributed almost equally.
+
+## Coronavirus cases distribution map view
+
+Let's show the comparison of the total coronavirus cases in each German State 
+on the map. For this purpose we need to add coordinates of each State.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+latitude <- c(48.99999229, 50.26660748, 52.52181866, 51.7704175, 53.55043805, 53.55002464,
+              51.30000694, 53.63330408, 53.1299986, 52.02998822, 49.98247246, 49.25039044,
+              50.82998395, 52.13042137, 54.78374778, 50.97005292)
+
+longtitude <- c(8.399993448, 10.96660681, 13.40154862, 14.32996741, 8.579982461,
+                9.999999144, 9.500029662, 11.41669861, 8.220004434, 8.530011351,
+                8.273219156, 6.970003213, 12.91997595, 11.62000362, 9.433315388,
+                11.02996212)
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_map <- covid_data_by_age_state %>%
+  group_by(state) %>%
+  summarise(Cases = sum(Cases),
+            Deaths = sum(Deaths),
+            population = sum(population)) %>%
+  ungroup()
+```
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_data_map$lat <- latitude
+covid_data_map$long <- longtitude
+covid_data_map
+```
+
+And ultimately we can create a map with clusters, each corresponding to a certain
+German state and reflecting the total number of coronavirus cases recorded in this
+state.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+library(leaflet)
+map <- leaflet() %>%
+  addProviderTiles(providers$Esri.WorldStreetMap) %>%
+  
+  setView(lng = 10.4515, lat = 51.7657, zoom = 6) %>%
+  
+  addCircleMarkers(data = covid_data_map,
+                   covid_data_map$long,
+                   covid_data_map$lat,
+                   weight = 0.5,
+                   color = "green",
+                   radius = covid_data_map$Cases/125000,
+                   fillOpacity = 0.7,
+                   stroke = T,
+                   label = ~paste0(state, ": ", 
+                                   as.character.numeric_version(Cases)), 
+                   group = "Points")
+
+map
+```
+
+## Vaccine Analysis
+
+Here we are going to explore our third dataset, `covid_de_vaccines`, to analyse
+the speed of vaccination by each of three vaccines. Unfortunately, the data given
+is limited to the cumulative number of vaccines and date of first and second doses,
+so we were not able to join the dataset with the previous ones. However, it is
+still interesting to know which vaccine was known to be the most popular one and
+how the trend has changed.  
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+covid_de_vaccines %>%
+  plot_ly(x = ~date,
+          y = ~pfizer_cumul,
+          name = "Pfizer",
+          type = "scatter",
+          mode = "lines") %>%
+  add_trace(y = ~astrazeneca_cumul, name = "Astra Zeneca") %>%
+  add_trace(y = ~moderna_cumul, name = "Moderna") %>%
+  layout(title = "Vaccinations progression over time",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "Number of jabs administered"))
+```
+
+From the line graph we may clearly see the popularity of Pfizer vaccine, which
+more than 130 million people received by June 2022. Only around 30 million people
+were vaccinated with Moderna, which is followed by nearly 13 million getting 
+Astra Zeneca vaccine. Notably, we may observe a speed curve of Pfizer vaccination
+starting from February 2021.
+From our perspective, such a high popularity of Pfizer may be explained by the
+decision of German government make a Pfizer vaccine a default option and therefore
+German citizens simply did not have a choice to choose the vaccine producer. 
+Moreover, after some time since launching Astra Zeneca was known to have many 
+side-effects and therefore the usage of this vaccine type was decreased dramatically.
+
+## Targeted vaccination rate
+
+Now we want to check if the target vaccination rate of 90% stated by the German
+government was achieved. At first let's calculate total German population.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE}
+germany_population <- sum(demographics_de$population)
+germany_population
+```
+
+We can now create a bar gauge for the current vaccination rate in Germany,
+namely the relative number of people who got the first jab and the percent of 
+citizens who received a full vaccination - 2 doses of vaccines.
+
+```{r, warning=FALSE, message=FALSE, echo=FALSE, fig.align="center"}
+covid_de_vaccines %>%
+  plot_ly(type = "indicator",
+            mode = "number+gauge+delta",
+            value = ~persons_full_cumul[531]/germany_population * 100,
+            domain = list(x = c(0.25, 1), y= c(0.4, 0.6)),
+            title = list(text = "<b>Full vaccination</b>"),
+            delta = list(reference = 90),
+            gauge = list(shape = "bullet",
+                         axis = list(range = list(NULL, 100)),
+            threshold = list(line = list(color = "black", width = 3),
+                             thickness = 1,
+                             value = 90),
+            steps = list(list(range = c(0, 50), color = "lightgreen"),
+                         list(range = c(50, 85), color = "green")),
+            bar = list(color = "black"))) %>%
+  add_trace(type = "indicator",
+          mode = "number+gauge+delta",
+          value = ~persons_first_cumul[531]/germany_population * 100,
+          domain = list(x = c(0.25, 1), y= c(0.7, 0.9)),
+          title = list(text = "<b>First Dose</b>"),
+          delta = list(reference = 90),
+          gauge = list(shape = "bullet",
+                       axis = list(range = list(NULL, 300)),
+          threshold = list(line = list(color = "black", width = 3),
+                           thickness = 1,
+                           value = 90),
+          steps = list(list(range = c(0, 50), color = "lightgreen"),
+                       list(range = c(50, 85), color = "green")),
+          bar = list(color = "black")))
+
+```
+
+From these graphs we may conclude that 77.6% of the German population received one
+dose of the vaccine and 76% are fully vaccinated. However, the target of 90% 
+set by the German government was not yet achieved. Thus, at the moment almost 
+every fourth person has not received a jab against COVID-19, so German population
+has not developed a herd immunity yet and therefore the number of coronavirus 
+cases started to rise again this summer.
+
+# Conclusion
+
+After a detailed exploratory data analysis of our dataset we have come to the following
+conclusions:
+
+1. The most COVID-19 affected German States turned out to be the most populated
+districts - Nordrhein-Westfallen, Bayern and Baden-Wuerttemberg. Although Sachsen
+has a much lower population and number of recorded cases than Baden-Wuerttemberg
+its death toll appeared to be almost the same as in this State, most likely because
+of the ageing population.
+2. The most infected age group is the largest one - people aged from 35 to 59 years
+old, while the highest mortality rate is observed among the elderly people - 
+80-99. So, the older a person is the higher the likelihood that this person dies
+from coronavirus.
+3. The proportion of females that caught COVID-19 is few percents higher, since
+the number of women living in Germany is higher than that of men; however, roughly
+7% more males died from coronavirus.
+4. Among 3 different vaccine producers, the number of people that received Pfizer
+jab is significantly higher than that of Moderna and Astra Zeneca and makes up
+more than 130 million doses administered by June 10, 2022. It is also notable, that
+Astra Zeneca vaccines were discontinued in July 2021 due to discovered rare
+blood clots.
+5. The targeted vaccination rate of 90% stated by the German government was not 
+yet achieved. Current figures stand at 76% for fully vaccinated German population,
+which means that almost every fourth person in Germany has still not received
+a jab. That is why the number of coronavirus cases started to surge again this
+summer.
